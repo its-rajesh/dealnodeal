@@ -60,19 +60,26 @@
     .note{color:var(--muted); font-size:12px}
 
     .modal-backdrop{position:fixed; inset:0; background:rgba(5,8,12,.6); display:none; align-items:center; justify-content:center; z-index:50}
-    .modal{width:min(580px, 92vw); background:linear-gradient(180deg, #0f141c, #0c1118); border:1px solid #1e2837; border-radius:16px; box-shadow: var(--shadow); overflow:hidden}
-    .modal header{padding:16px 18px; border-bottom:1px solid #1e2837; justify-content:space-between}
+    .modal{width:min(620px, 92vw); background:linear-gradient(180deg, #0f141c, #0c1118); border:1px solid #1e2837; border-radius:16px; box-shadow: var(--shadow); overflow:hidden}
+    .modal header{padding:16px 18px; border-bottom:1px solid #1e2837; justify-content:space-between; display:flex; align-items:center}
     .modal .body{padding:18px}
     .deal-actions{display:flex; gap:10px; justify-content:flex-end; padding:12px 18px; border-top:1px solid #1e2837}
+
+    /* Risk meter */
+    .risk-wrap{display:grid; gap:8px; margin-top:10px}
+    .risk-head{display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--muted)}
+    .riskbar{height:12px; background:#0d1522; border:1px solid #1e2837; border-radius:999px; overflow:hidden}
+    .riskbar > div{height:100%; background:linear-gradient(90deg, #7cc7ff, #00e0b8); width:0%}
 
     .tada{animation: tada .6s ease}
     @keyframes tada{0%{transform:scale(1)} 20%{transform:scale(1.04)} 40%{transform:scale(.98)} 60%{transform:scale(1.02)} 80%{transform:scale(.99)} 100%{transform:scale(1)}}
 
-    .riskbar{height:12px; background:#0d1522; border:1px solid #1e2837; border-radius:999px; overflow:hidden}
-    .riskbar > div{height:100%; background:linear-gradient(90deg, #7cc7ff, #00e0b8); width:0%}
+    /* Confetti canvas */
+    #confetti{position:fixed; inset:0; pointer-events:none; z-index:60; display:none}
   </style>
 </head>
 <body>
+  <canvas id="confetti"></canvas>
   <div class="app">
     <header>
       <div class="logo">DEAL or NO DEAL — <span style="color:var(--accent)">₹</span> Edition</div>
@@ -95,7 +102,7 @@
             <div class="badge" id="heldBadge">—</div>
             <div>
               <div style="font-weight:800">Your Held Box</div>
-              <div class="meta">Stays sealed until you Deal or reach the end.</div>
+              <div class="meta" id="heldMeta">Stays sealed until you Deal or reach the end.</div>
             </div>
           </div>
         </div>
@@ -122,6 +129,10 @@
             <button id="showOfferBtn" class="btn secondary" disabled>Show Offer</button>
           </div>
           <div style="padding:12px 16px; color:var(--muted); font-size:14px" id="offerPreview">—</div>
+          <div class="risk-wrap">
+            <div class="risk-head"><div>Risk meter</div><div id="riskLabel">0%</div></div>
+            <div class="riskbar"><div id="riskFill"></div></div>
+          </div>
         </div>
         <div class="footer">
           <div class="note">Tip: Early offers are conservative; they grow as the game progresses.</div>
@@ -130,7 +141,7 @@
     </div>
   </div>
 
-  <!-- Modal for Offer -->
+  <!-- Modal: Offer -->
   <div class="modal-backdrop" id="offerModal">
     <div class="modal tada">
       <header>
@@ -142,12 +153,9 @@
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px">
           <div style="font-size:clamp(26px, 4vw, 34px); font-weight:800; letter-spacing:.3px" id="offerAmount">₹0</div>
         </div>
-        <div style="display:grid; gap:8px">
-          <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--muted)">
-            <div>Risk meter</div>
-            <div id="riskLabel">0%</div>
-          </div>
-          <div class="riskbar"><div id="riskFill"></div></div>
+        <div class="risk-wrap">
+          <div class="risk-head"><div>Risk meter</div><div id="riskLabel2">0%</div></div>
+          <div class="riskbar"><div id="riskFill2"></div></div>
         </div>
       </div>
       <div class="deal-actions">
@@ -157,7 +165,7 @@
     </div>
   </div>
 
-  <!-- Modal for Final Result -->
+  <!-- Modal: Final Result -->
   <div class="modal-backdrop" id="finalModal">
     <div class="modal tada">
       <header>
@@ -171,9 +179,35 @@
     </div>
   </div>
 
+  <!-- Modal: How to Play -->
+  <div class="modal-backdrop" id="helpModal">
+    <div class="modal">
+      <header>
+        <div style="font-weight:800">How to Play</div>
+        <button class="btn secondary" id="closeHelp">Close</button>
+      </header>
+      <div class="body" style="font-size:14px; color:var(--muted)">
+        <ol style="margin:0; padding-left:18px; line-height:1.6">
+          <li>Pick <strong>one personal box</strong>. It moves below and stays sealed.</li>
+          <li>Open other boxes one by one. You’ll see what they contained.</li>
+          <li>After each open, the <strong>Banker</strong> makes an offer based on remaining values.</li>
+          <li>Choose <strong>Deal</strong> to take the offer or <strong>No Deal</strong> to keep playing.</li>
+          <li>If you never deal, you win whatever is inside your <strong>held box</strong>.</li>
+        </ol>
+        <p style="margin-top:10px">Early offers are conservative; they get closer to the expected value as boxes run out.</p>
+      </div>
+      <div class="deal-actions">
+        <button class="btn" id="startBtn">Let’s Play</button>
+      </div>
+    </div>
+  </div>
+
+  <audio id="openSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+  <audio id="dealSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+
   <script>
     // ===== Helpers =====
-    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹\\u00A0','₹');
+    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹ ','₹');
 
     const BOX_VALUES = [
       1, 5, 10, 25, 50,
@@ -184,27 +218,13 @@
       1000000, 1500000, 2000000, 2500000, 3500000, 5000000
     ];
 
-    // Banker formula: EV * risk * damping - variance penalty (early only)
-    function bankerOffer(remainingValues, attemptsDone, totalAttempts){
-      const exp = remainingValues.reduce((a,b)=>a+b,0) / remainingValues.length;
-      const progress = attemptsDone / Math.max(1, totalAttempts);
-      const risk = 0.50 + 0.40 * progress; // 0.50 -> 0.90
-
-      let damping = 1.0;
-      if (attemptsDone <= 1) damping = 0.40;
-      else if (attemptsDone === 2) damping = 0.50;
-      else if (attemptsDone === 3) damping = 0.60;
-      else if (attemptsDone === 4) damping = 0.70;
-
+    function bankerOffer(values, attempts, total){
+      const exp = values.reduce((a,b)=>a+b,0)/values.length;
+      const progress = attempts/Math.max(1,total);
+      const risk = 0.50 + 0.40*progress; // 0.50 -> 0.90
+      const damping = attempts<=1?0.40:attempts===2?0.50:attempts===3?0.60:attempts===4?0.70:1.00;
       let offer = exp * risk;
-      if (remainingValues.length > 3){
-        const mean = exp;
-        const variance = remainingValues.reduce((s,x)=> s + (x-mean)*(x-mean), 0) / remainingValues.length;
-        const std = Math.sqrt(variance);
-        offer -= 0.04 * std;
-      }
       offer *= damping;
-
       return { amount: Math.max(0, Math.round(offer)), risk, damping, exp };
     }
 
@@ -212,53 +232,41 @@
     let boxes = []; // {label, value, opened, held}
     let heldLabel = null;
     let attempts = 0;
-    let history = []; // stack for undo: {label}
-    let lastOpenedValue = null; // for offer context
+    let history = [];
+    let lastOpenedValue = null;
 
     const el = (id)=>document.getElementById(id);
 
     function initGame(){
       const labels = Array.from({length:26}, (_,i)=> i+1);
       const values = [...BOX_VALUES];
-      // Shuffle values
-      for(let i=values.length-1;i>0;i--){
-        const j = Math.floor(Math.random()*(i+1));
-        [values[i], values[j]] = [values[j], values[i]];
-      }
-      boxes = labels.map((lab, i)=> ({label: lab, value: values[i], opened:false, held:false}));
+      for(let i=values.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [values[i],values[j]]=[values[j],values[i]]; }
+      boxes = labels.map((lab,i)=> ({label:lab,value:values[i],opened:false,held:false}));
       heldLabel = null; attempts = 0; history = []; lastOpenedValue = null;
       renderAll();
       setHint('Choose your personal box (click one). It stays sealed till the end.');
-      el('undoBtn').disabled = true;
-      el('showOfferBtn').disabled = true;
       el('offerPreview').textContent = '—';
-      el('roundInfo').textContent = 'Round 0';
-      el('heldInfo').textContent = 'Held: —';
+      el('riskFill').style.width = '0%';
+      el('riskLabel').textContent = '0%';
+      showHelp();
     }
+
+    function showHelp(){ el('helpModal').style.display='flex'; }
+    function hideHelp(){ el('helpModal').style.display='none'; }
 
     function setHint(msg){ el('hint').textContent = msg; }
 
-    function renderAll(){
-      renderGrid();
-      renderHeld();
-      renderStats();
-      renderValuesList();
-      updateOfferPreview();
-    }
+    function renderAll(){ renderGrid(); renderHeld(); renderStats(); renderValuesList(); updateOfferPreview(); }
 
     function renderGrid(){
-      const g = el('grid');
-      g.innerHTML = '';
+      const g = el('grid'); g.innerHTML='';
       const sorted = [...boxes].sort((a,b)=> a.label - b.label);
       for(const b of sorted){
-        if (b.held) continue; // don't show held box in grid
+        if (b.held) continue; // hide held from grid
         const div = document.createElement('div');
         div.className = 'box' + (b.opened?' opened revealed':'');
-        div.dataset.label = b.label;
-        if (b.opened){ div.dataset.value = fmt(b.value); }
-        const sp = document.createElement('span');
-        sp.textContent = b.label;
-        div.appendChild(sp);
+        if (b.opened) div.dataset.value = fmt(b.value);
+        const sp = document.createElement('span'); sp.textContent = b.label; div.appendChild(sp);
         div.addEventListener('click', ()=> onBoxClick(b.label));
         g.appendChild(div);
       }
@@ -266,10 +274,11 @@
 
     function renderHeld(){
       const slot = el('heldSlot');
-      if (!heldLabel){ slot.style.display = 'none'; return; }
-      const held = boxes.find(b=> b.label === heldLabel);
+      if (!heldLabel){ slot.style.display='none'; return; }
+      const held = boxes.find(b=> b.label===heldLabel);
       el('heldBadge').textContent = held.label;
-      slot.style.display = 'flex';
+      el('heldMeta').textContent = 'Stays sealed until you Deal or reach the end.';
+      slot.style.display='flex';
       el('heldInfo').textContent = `Held: ${heldLabel}`;
     }
 
@@ -277,32 +286,19 @@
       el('attempts').textContent = attempts;
       const unopened = boxes.filter(b=> !b.opened).length; // includes held
       el('boxesLeft').textContent = unopened;
-      const roundText = `Round ${attempts}`;
-      el('roundInfo').textContent = roundText;
+      el('roundInfo').textContent = `Round ${attempts}`;
     }
 
     function renderValuesList(){
-      const container = el('valuesList');
-      container.innerHTML = '';
-      const all = BOX_VALUES.slice().sort((a,b)=> a-b); // ascending
+      const container = el('valuesList'); container.innerHTML='';
+      const all = BOX_VALUES.slice().sort((a,b)=> a-b);
       const unopenedVals = new Set(boxes.filter(b=> !b.opened).map(b=> b.value));
-      const left = all.slice(0, 13);
-      const right = all.slice(13);
-      function makeCol(arr){
-        const col = document.createElement('div');
-        col.style.display = 'grid';
-        col.style.gap = '8px';
-        for(const v of arr){
-          const d = document.createElement('div');
-          const isLive = unopenedVals.has(v);
-          d.className = 'pill ' + (isLive? 'live':'gone');
-          d.innerHTML = `<div>${fmt(v)}</div><div>${isLive? '●':'×'}</div>`;
-          col.appendChild(d);
-        }
-        return col;
-      }
-      container.appendChild(makeCol(left));
-      container.appendChild(makeCol(right));
+      const left = all.slice(0,13), right = all.slice(13);
+      function col(arr){ const c=document.createElement('div'); c.style.display='grid'; c.style.gap='8px';
+        for(const v of arr){ const d=document.createElement('div'); const live=unopenedVals.has(v);
+          d.className='pill '+(live?'live':'gone'); d.innerHTML=`<div>${fmt(v)}</div><div>${live?'●':'×'}</div>`; c.appendChild(d); }
+        return c; }
+      container.appendChild(col(left)); container.appendChild(col(right));
     }
 
     function currentOffer(){
@@ -311,147 +307,146 @@
     }
 
     function updateOfferPreview(){
-      if (attempts === 0){ el('offerPreview').textContent = '—'; return; }
-      const {amount} = currentOffer();
+      if (attempts===0){ el('offerPreview').textContent='—'; return; }
+      const {amount, risk, damping} = currentOffer();
       el('offerPreview').textContent = `Current offer: ${fmt(amount)}`;
+      const eff = Math.max(0, Math.min(1, risk*(damping||1)));
+      el('riskFill').style.width = Math.round(eff*100)+'%';
+      el('riskLabel').textContent = Math.round(eff*100)+'%';
     }
 
     function onBoxClick(label){
-      const idx = boxes.findIndex(b=> b.label === label);
-      if (idx === -1) return;
-      const b = boxes[idx];
-
-      // First click: choose held
-      if (!heldLabel){
-        b.held = true; heldLabel = b.label; renderAll();
-        setHint('Now open a DIFFERENT box to reveal it. Your box stays sealed.');
-        playSound('click');
+      const b = boxes.find(x=> x.label===label);
+      if (!b) return;
+      if (!heldLabel){ // choose held
+        b.held = true; heldLabel = b.label; renderAll(); setHint('Now open a DIFFERENT box. Your box stays sealed.');
         return;
       }
-
-      // After holding, can only open non-held, non-opened boxes
       if (b.held || b.opened) return;
 
-      // Open this box (show its value first)
-      b.opened = true;
-      attempts += 1;
-      history.push({label: b.label});
-      lastOpenedValue = b.value;
-      playSound('click');
-
+      // Open a non-held box
+      b.opened = true; attempts += 1; lastOpenedValue = b.value; el('openSound').play();
       renderAll();
-      el('undoBtn').disabled = history.length === 0;
-      el('showOfferBtn').disabled = false;
 
-      // If only held remains (i.e., all others opened), end immediately
-      const unopenedCount = boxes.filter(x=> !x.opened).length; // includes held
-      if (unopenedCount === 1){
-        endWithHeld();
-        return;
-      }
+      // If only held remains, finish
+      if (boxes.filter(x=> !x.opened).length===1){ revealHeldAndFinish(); return; }
 
-      // Delay the offer so user sees the revealed value first
-      setTimeout(()=>{ showOfferModal(); }, 900);
+      // Show offer after a moment so the reveal is visible
+      setTimeout(()=> showOfferModal(), 800);
     }
 
     // ===== Offer Modal =====
     function showOfferModal(){
-      const back = el('offerModal');
       const {amount, risk, damping, exp} = currentOffer();
-      el('offerAmount').textContent = fmt(amount);
+      const openedTxt = lastOpenedValue!=null ? `You opened <strong>${fmt(lastOpenedValue)}</strong>. ` : '';
       const remainingCount = boxes.filter(b=> !b.opened).length;
-      const openedTxt = lastOpenedValue != null ? `You opened ${fmt(lastOpenedValue)}.` : '';
-      el('offerContext').innerHTML = `${openedTxt} Remaining unopened boxes: <strong>${remainingCount}</strong>. Expected value ≈ <strong>${fmt(Math.round(exp))}</strong>`;
-      const effective = Math.max(0, Math.min(1, risk * (damping || 1)));
-      el('riskFill').style.width = Math.round(effective*100) + '%';
-      el('riskLabel').textContent = Math.round(effective*100) + '%';
-      back.style.display = 'flex';
-      playSound('offer');
+      el('offerContext').innerHTML = `${openedTxt}Remaining unopened boxes: <strong>${remainingCount}</strong>. Expected value ≈ <strong>${fmt(Math.round(exp))}</strong>`;
+      el('offerAmount').textContent = fmt(amount);
+      const eff = Math.max(0, Math.min(1, risk*(damping||1)));
+      el('riskFill2').style.width = Math.round(eff*100)+'%';
+      el('riskLabel2').textContent = Math.round(eff*100)+'%';
+      el('offerModal').style.display='flex';
     }
-    function hideOfferModal(){ el('offerModal').style.display = 'none'; }
+    function hideOfferModal(){ el('offerModal').style.display='none'; }
 
     el('showOfferBtn').addEventListener('click', showOfferModal);
     el('closeModal').addEventListener('click', hideOfferModal);
 
-    el('noDealBtn').addEventListener('click', ()=>{
-      hideOfferModal();
-      setHint('No Deal. Open another box (not your held one).');
-      playSound('click');
-      if (boxes.filter(b=> !b.opened).length === 1) endWithHeld();
-    });
+    el('noDealBtn').addEventListener('click', ()=>{ hideOfferModal(); setHint('No Deal. Open another box.'); });
 
     el('dealBtn').addEventListener('click', ()=>{
-      const {amount} = currentOffer();
       hideOfferModal();
-      playSound('win');
-      endWithDeal(amount);
-    });
-
-    function endWithDeal(amount){
-      const held = boxes.find(b=> b.label === heldLabel);
-      const final = el('finalBody');
-      final.innerHTML = `
+      // Always reveal held box before showing final result (per request #2)
+      revealHeld(true);
+      // Celebrate and show final
+      launchConfetti(); el('dealSound').play();
+      const held = boxes.find(b=> b.label===heldLabel);
+      const {amount} = currentOffer();
+      const fb = el('finalBody');
+      fb.innerHTML = `
         <div style="margin-bottom:10px; color:var(--muted)">You took the banker’s deal.</div>
         <div style="font-size:28px; font-weight:800; margin-bottom:12px">You win: ${fmt(amount)}</div>
-        <div>Your sealed box was <strong>#${held.label}</strong>.</div>
+        <div>Your sealed box #${held.label} contained: <strong>${fmt(held.value)}</strong>.</div>
       `;
-      el('finalModal').style.display = 'flex';
-    }
+      el('finalModal').style.display='flex';
+    });
 
-    function endWithHeld(){
-      const held = boxes.find(b=> b.label === heldLabel);
-      const final = el('finalBody');
-      final.innerHTML = `
+    // ===== Finish (No Deal to the end) =====
+    function revealHeldAndFinish(){
+      revealHeld(false);
+      launchConfetti();
+      const held = boxes.find(b=> b.label===heldLabel);
+      const fb = el('finalBody');
+      fb.innerHTML = `
         <div style="margin-bottom:10px; color:var(--muted)">No Deal to the end. Only your box remains.</div>
         <div style="font-size:28px; font-weight:800; margin-bottom:12px">Your box #${held.label} contains: ${fmt(held.value)}</div>
         <div>You win: <strong>${fmt(held.value)}</strong> 🎉</div>
       `;
-      el('finalModal').style.display = 'flex';
-      playSound('win');
+      el('finalModal').style.display='flex';
     }
 
-    el('closeFinal').addEventListener('click', ()=> el('finalModal').style.display = 'none');
+    // Reveal held value in the held card (and text) before final
+    function revealHeld(fromDeal){
+      const held = boxes.find(b=> b.label===heldLabel);
+      if (!held) return;
+      el('heldMeta').textContent = `Your box #${held.label} contains: ${fmt(held.value)}`;
+    }
+
+    // ===== Confetti =====
+    function launchConfetti(){
+      const canvas = el('confetti');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = window.innerWidth;
+      const h = canvas.height = window.innerHeight;
+      canvas.style.display='block';
+
+      const N = 180;
+      const parts = Array.from({length:N}, ()=>({
+        x: Math.random()*w,
+        y: -20 - Math.random()*h*0.3,
+        r: 2 + Math.random()*4,
+        c: `hsl(${Math.floor(Math.random()*360)},90%,60%)`,
+        vx: -1 + Math.random()*2,
+        vy: 2 + Math.random()*3,
+        ay: 0.03 + Math.random()*0.04,
+        life: 160 + Math.random()*60
+      }));
+
+      let frame=0;
+      (function tick(){
+        ctx.clearRect(0,0,w,h);
+        parts.forEach(p=>{
+          p.vy += p.ay; p.x += p.vx; p.y += p.vy; p.life -= 1;
+          ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+        });
+        frame++;
+        if (frame<220) requestAnimationFrame(tick); else canvas.style.display='none';
+      })();
+    }
+
+    // ===== Footer controls =====
+    el('closeFinal').addEventListener('click', ()=> el('finalModal').style.display='none');
     el('playAgainBtn').addEventListener('click', ()=>{ el('finalModal').style.display='none'; initGame(); });
 
-    // ===== Undo (reverts last OPEN) =====
     el('undoBtn').addEventListener('click', ()=>{
-      if (!history.length || attempts === 0) return;
-      const last = history.pop();
-      const b = boxes.find(x=> x.label === last.label);
-      if (b){ b.opened = false; }
-      attempts -= 1;
-      lastOpenedValue = null;
-      renderAll();
-      el('undoBtn').disabled = history.length === 0;
-      playSound('click');
+      const last = boxes.findLast?.(b=> b.opened && b.label!==heldLabel);
+      if (!last || attempts===0) return;
+      last.opened = false; attempts -= 1; lastOpenedValue = null; renderAll();
     });
 
-    // ===== New Game =====
-    el('newGameBtn').addEventListener('click', initGame);
+    el('newGameBtn').addEventListener('click', ()=>{ initGame(); });
 
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e)=>{
-      if (e.key === 'Escape') { hideOfferModal(); el('finalModal').style.display='none'; }
-    });
+    // Help modal events
+    el('closeHelp').addEventListener('click', hideHelp);
+    el('startBtn').addEventListener('click', hideHelp);
 
     // Boot
     initGame();
 
-    // ===== Sounds (WebAudio) =====
-    let audioCtx;
-    function beep(freq=440, dur=0.08, gain=0.02){
-      audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.value = freq; g.gain.value = gain;
-      o.connect(g); g.connect(audioCtx.destination);
-      o.start(); o.stop(audioCtx.currentTime + dur);
-    }
-    function playSound(kind){
-      if (kind==='click') { beep(520, 0.05, 0.03); }
-      else if (kind==='offer') { beep(440, 0.06, 0.025); setTimeout(()=>beep(660, 0.06, 0.02), 80); }
-      else if (kind==='win') { beep(660, 0.07, 0.03); setTimeout(()=>beep(880, 0.09, 0.03), 90); setTimeout(()=>beep(990, 0.12, 0.02), 200); }
-    }
+    // ESC closes modals
+    document.addEventListener('keydown', (e)=>{
+      if (e.key==='Escape'){ el('offerModal').style.display='none'; el('finalModal').style.display='none'; }
+    });
   </script>
 </body>
 </html>
