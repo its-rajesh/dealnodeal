@@ -36,9 +36,14 @@
     .box::before{content:""; position:absolute; inset:0; border-radius:14px; background:linear-gradient(180deg, #0f1828, #0c1220); border:1px solid #1e2a41; box-shadow: inset 0 0 0 1px rgba(255,255,255,.03), 0 8px 16px rgba(0,0,0,.35)}
     .box span{position:relative; z-index:1}
     .box:hover{transform: translateY(-2px)}
-    .box.held{background: linear-gradient(180deg, rgba(124,199,255,.1), rgba(0,224,184,.08)); box-shadow: 0 0 0 2px var(--accent-2) inset;}
-    .box.opened{filter:saturate(.35) brightness(.7); cursor:default}
-    .box.revealed::after{content:attr(data-value); position:absolute; inset:auto 6px 6px auto; background:rgba(0,0,0,.5); padding:4px 8px; border-radius:8px; font-size:12px; color:var(--gold); border:1px solid rgba(255,209,102,.45)}
+    .box.opened{filter:saturate(.35) brightness(.75); cursor:default}
+    .box.revealed::after{content:attr(data-value); position:absolute; inset:auto 6px 6px auto; background:rgba(0,0,0,.55); padding:6px 10px; border-radius:8px; font-size:12px; color:var(--gold); border:1px solid rgba(255,209,102,.45)}
+
+    /* Held box slot */
+    .held-slot{padding:0 16px 16px}
+    .held-card{display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:14px; border:1px dashed #1e6d62; background:linear-gradient(180deg, rgba(0,224,184,.08), rgba(124,199,255,.06)); box-shadow: inset 0 0 0 2px rgba(0,224,184,.25)}
+    .held-card .badge{width:42px; height:42px; display:flex; align-items:center; justify-content:center; border-radius:10px; font-weight:800; background:linear-gradient(180deg, #0f1828, #0c1220); border:1px solid #1e2a41}
+    .held-card .meta{font-size:13px; color:var(--muted)}
 
     .side{display:grid; grid-template-rows:auto auto 1fr auto; gap:12px; padding:12px}
     .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px}
@@ -46,10 +51,10 @@
     .stat .k{font-size:12px; color:var(--muted)}
     .stat .v{font-size:18px; font-weight:800}
 
-    .values{display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px}
+    .values{display:grid; grid-template-columns:1fr; gap:8px; padding:8px}
     .pill{background:#101828; border:1px solid #1e2837; border-radius:10px; padding:8px 10px; font-size:13px; color:var(--muted); display:flex; justify-content:space-between; align-items:center}
     .pill.live{color:#d8e7ff}
-    .pill.gone{opacity:.4; text-decoration:line-through}
+    .pill.gone{opacity:.45; text-decoration:line-through}
 
     .footer{display:flex; gap:8px; justify-content:space-between; align-items:center; padding:10px 12px; border-top:1px solid #1e2837}
     .note{color:var(--muted); font-size:12px}
@@ -82,6 +87,15 @@
           </div>
         </div>
         <div class="grid" id="grid"></div>
+        <div class="held-slot">
+          <div id="heldSlot" class="held-card" style="display:none">
+            <div class="badge" id="heldBadge">—</div>
+            <div>
+              <div style="font-weight:800">Your Held Box</div>
+              <div class="meta">Stays sealed until you Deal or reach the end.</div>
+            </div>
+          </div>
+        </div>
         <div class="footer">
           <div class="note" id="roundInfo">Round 0</div>
           <div class="note" id="heldInfo">Held: —</div>
@@ -147,7 +161,7 @@
 
   <script>
     // ===== Helpers =====
-    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹\u00A0','₹');
+    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹ ','₹');
 
     const BOX_VALUES = [
       1, 5, 10, 25, 50,
@@ -185,7 +199,7 @@
     let boxes = []; // {label, value, opened, held}
     let heldLabel = null;
     let attempts = 0;
-    let history = []; // stack for undo: {label, value}
+    let history = []; // stack for undo: {label}
 
     const el = (id)=>document.getElementById(id);
 
@@ -199,9 +213,7 @@
       }
       boxes = labels.map((lab, i)=> ({label: lab, value: values[i], opened:false, held:false}));
       heldLabel = null; attempts = 0; history = [];
-      renderGrid();
-      renderStats();
-      renderValuesList();
+      renderAll();
       setHint('Choose your personal box (click one). It stays sealed till the end.');
       el('undoBtn').disabled = true;
       el('showOfferBtn').disabled = true;
@@ -212,18 +224,24 @@
 
     function setHint(msg){ el('hint').textContent = msg; }
 
+    function renderAll(){
+      renderGrid();
+      renderHeld();
+      renderStats();
+      renderValuesList();
+      updateOfferPreview();
+    }
+
     function renderGrid(){
       const g = el('grid');
       g.innerHTML = '';
-      // sort by label for consistent placement
       const sorted = [...boxes].sort((a,b)=> a.label - b.label);
       for(const b of sorted){
+        if (b.held) continue; // don't show held box in grid
         const div = document.createElement('div');
-        div.className = 'box' + (b.held?' held':'') + (b.opened?' opened revealed':'');
+        div.className = 'box' + (b.opened?' opened revealed':'');
         div.dataset.label = b.label;
-        if (b.opened){
-          div.dataset.value = fmt(b.value);
-        }
+        if (b.opened){ div.dataset.value = fmt(b.value); }
         const sp = document.createElement('span');
         sp.textContent = b.label;
         div.appendChild(sp);
@@ -232,36 +250,40 @@
       }
     }
 
+    function renderHeld(){
+      const slot = el('heldSlot');
+      if (!heldLabel){ slot.style.display = 'none'; return; }
+      const held = boxes.find(b=> b.label === heldLabel);
+      el('heldBadge').textContent = held.label;
+      slot.style.display = 'flex';
+      el('heldInfo').textContent = `Held: ${heldLabel}`;
+    }
+
     function renderStats(){
       el('attempts').textContent = attempts;
-      el('boxesLeft').textContent = boxes.length;
+      const unopened = boxes.filter(b=> !b.opened).length; // includes held
+      el('boxesLeft').textContent = unopened;
       const roundText = `Round ${attempts}`;
       el('roundInfo').textContent = roundText;
-      el('heldInfo').textContent = `Held: ${heldLabel? heldLabel : '—'}`;
     }
 
     function renderValuesList(){
       const container = el('valuesList');
       container.innerHTML = '';
-      const all = BOX_VALUES.slice().sort((a,b)=> a-b);
-      const live = boxes.map(b=>b.value);
-      const liveSet = new Set(live);
-      const left = [], right = [];
-      all.forEach((v,i)=> (i%2? right: left).push(v));
-      function pill(v){
+      const all = BOX_VALUES.slice().sort((a,b)=> a-b); // strictly ordered
+      const unopenedVals = new Set(boxes.filter(b=> !b.opened).map(b=> b.value));
+      for(const v of all){
         const d = document.createElement('div');
-        const isLive = liveSet.has(v);
+        const isLive = unopenedVals.has(v);
         d.className = 'pill ' + (isLive? 'live':'gone');
         d.innerHTML = `<div>${fmt(v)}</div><div>${isLive? '●':'×'}</div>`;
-        return d;
+        container.appendChild(d);
       }
-      for(const v of left) container.appendChild(pill(v));
-      for(const v of right) container.appendChild(pill(v));
     }
 
     function currentOffer(){
-      const values = boxes.map(b=> b.value); // includes held box (unopened) 
-      return bankerOffer(values, attempts, 25); // total attempts max = 25 (until 1 box left)
+      const remaining = boxes.filter(b=> !b.opened).map(b=> b.value); // unopened incl. held
+      return bankerOffer(remaining, attempts, 25);
     }
 
     function updateOfferPreview(){
@@ -275,9 +297,9 @@
       if (idx === -1) return;
       const b = boxes[idx];
 
-      // If no held yet: first click chooses personal box (do NOT open it now)
+      // First click: choose held
       if (!heldLabel){
-        b.held = true; heldLabel = b.label; renderGrid(); renderStats();
+        b.held = true; heldLabel = b.label; renderAll();
         setHint('Now open a DIFFERENT box to reveal it. Your box stays sealed.');
         return;
       }
@@ -285,35 +307,24 @@
       // After holding, can only open non-held, non-opened boxes
       if (b.held || b.opened) return;
 
-      // Open this box
+      // Open this box (show its value first)
       b.opened = true;
       attempts += 1;
-      history.push({label: b.label, value: b.value});
+      history.push({label: b.label});
 
-      // Remove it visually and from remaining boxes list
-      // We will keep it in the array but mark opened; also present value badge
-      // Alternatively, we could actually remove. We'll keep and filter when needed.
-      // However, for banker + remaining values, we must exclude opened ones.
-      // Let's filter boxes array to unopened only now for simplicity
-      boxes = boxes.filter(x=> !x.opened);
-
-      renderGrid();
-      renderStats();
-      renderValuesList();
-
-      const offer = currentOffer();
-      el('offerPreview').textContent = `Current offer: ${fmt(offer)}`;
-      el('showOfferBtn').disabled = false;
+      renderAll();
       el('undoBtn').disabled = history.length === 0;
+      el('showOfferBtn').disabled = false;
 
-      // Auto-show offer each time a box is opened
-      showOfferModal();
-
-      // If only held box remains after filtering -> end game reveal
-      if (boxes.length === 1){
-        // Reveal held box value
+      // If only held remains (i.e., all others opened), end immediately
+      const unopenedCount = boxes.filter(x=> !x.opened).length; // includes held
+      if (unopenedCount === 1){
         endWithHeld();
+        return;
       }
+
+      // Delay the offer so user sees the revealed value first
+      setTimeout(()=>{ showOfferModal(); }, 900);
     }
 
     // ===== Offer Modal =====
@@ -330,7 +341,7 @@
     el('noDealBtn').addEventListener('click', ()=>{
       hideOfferModal();
       setHint('No Deal. Open another box (not your held one).');
-      if (boxes.length === 1) endWithHeld();
+      if (boxes.filter(b=> !b.opened).length === 1) endWithHeld();
     });
 
     el('dealBtn').addEventListener('click', ()=>{
@@ -340,7 +351,6 @@
     });
 
     function endWithDeal(amount){
-      // Show final modal
       const held = boxes.find(b=> b.label === heldLabel);
       const final = el('finalBody');
       final.innerHTML = `
@@ -369,12 +379,10 @@
     el('undoBtn').addEventListener('click', ()=>{
       if (!history.length || attempts === 0) return;
       const last = history.pop();
+      const b = boxes.find(x=> x.label === last.label);
+      if (b){ b.opened = false; }
       attempts -= 1;
-      // Reinsert last opened back into boxes array (it was filtered out)
-      boxes.push({label:last.label, value:last.value, opened:false, held: last.label===heldLabel});
-      // Keep boxes sorted by label for consistent layout
-      boxes.sort((a,b)=> a.label - b.label);
-      renderGrid(); renderStats(); renderValuesList(); updateOfferPreview();
+      renderAll();
       el('undoBtn').disabled = history.length === 0;
     });
 
