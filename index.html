@@ -51,7 +51,7 @@
     .stat .k{font-size:12px; color:var(--muted)}
     .stat .v{font-size:18px; font-weight:800}
 
-    .values{display:grid; grid-template-columns:1fr; gap:8px; padding:8px}
+    .values{display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px}
     .pill{background:#101828; border:1px solid #1e2837; border-radius:10px; padding:8px 10px; font-size:13px; color:var(--muted); display:flex; justify-content:space-between; align-items:center}
     .pill.live{color:#d8e7ff}
     .pill.gone{opacity:.45; text-decoration:line-through}
@@ -67,6 +67,9 @@
 
     .tada{animation: tada .6s ease}
     @keyframes tada{0%{transform:scale(1)} 20%{transform:scale(1.04)} 40%{transform:scale(.98)} 60%{transform:scale(1.02)} 80%{transform:scale(.99)} 100%{transform:scale(1)}}
+
+    .riskbar{height:12px; background:#0d1522; border:1px solid #1e2837; border-radius:999px; overflow:hidden}
+    .riskbar > div{height:100%; background:linear-gradient(90deg, #7cc7ff, #00e0b8); width:0%}
   </style>
 </head>
 <body>
@@ -135,8 +138,17 @@
         <button class="btn secondary" id="closeModal" aria-label="Close">Close</button>
       </header>
       <div class="body">
-        <div style="font-size:14px; color:var(--muted); margin-bottom:8px">Based on the expected value of remaining unopened boxes (including your held box), with early-round damping.</div>
-        <div style="font-size:clamp(26px, 4vw, 34px); font-weight:800; letter-spacing:.3px" id="offerAmount">₹0</div>
+        <div id="offerContext" style="font-size:14px; color:var(--muted); margin-bottom:10px">—</div>
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px">
+          <div style="font-size:clamp(26px, 4vw, 34px); font-weight:800; letter-spacing:.3px" id="offerAmount">₹0</div>
+        </div>
+        <div style="display:grid; gap:8px">
+          <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px; color:var(--muted)">
+            <div>Risk meter</div>
+            <div id="riskLabel">0%</div>
+          </div>
+          <div class="riskbar"><div id="riskFill"></div></div>
+        </div>
       </div>
       <div class="deal-actions">
         <button id="noDealBtn" class="btn secondary">No Deal</button>
@@ -161,7 +173,7 @@
 
   <script>
     // ===== Helpers =====
-    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹ ','₹');
+    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹\\u00A0','₹');
 
     const BOX_VALUES = [
       1, 5, 10, 25, 50,
@@ -192,7 +204,8 @@
         offer -= 0.04 * std;
       }
       offer *= damping;
-      return Math.max(0, Math.round(offer));
+
+      return { amount: Math.max(0, Math.round(offer)), risk, damping, exp };
     }
 
     // ===== State =====
@@ -200,6 +213,7 @@
     let heldLabel = null;
     let attempts = 0;
     let history = []; // stack for undo: {label}
+    let lastOpenedValue = null; // for offer context
 
     const el = (id)=>document.getElementById(id);
 
@@ -212,7 +226,7 @@
         [values[i], values[j]] = [values[j], values[i]];
       }
       boxes = labels.map((lab, i)=> ({label: lab, value: values[i], opened:false, held:false}));
-      heldLabel = null; attempts = 0; history = [];
+      heldLabel = null; attempts = 0; history = []; lastOpenedValue = null;
       renderAll();
       setHint('Choose your personal box (click one). It stays sealed till the end.');
       el('undoBtn').disabled = true;
@@ -270,15 +284,25 @@
     function renderValuesList(){
       const container = el('valuesList');
       container.innerHTML = '';
-      const all = BOX_VALUES.slice().sort((a,b)=> a-b); // strictly ordered
+      const all = BOX_VALUES.slice().sort((a,b)=> a-b); // ascending
       const unopenedVals = new Set(boxes.filter(b=> !b.opened).map(b=> b.value));
-      for(const v of all){
-        const d = document.createElement('div');
-        const isLive = unopenedVals.has(v);
-        d.className = 'pill ' + (isLive? 'live':'gone');
-        d.innerHTML = `<div>${fmt(v)}</div><div>${isLive? '●':'×'}</div>`;
-        container.appendChild(d);
+      const left = all.slice(0, 13);
+      const right = all.slice(13);
+      function makeCol(arr){
+        const col = document.createElement('div');
+        col.style.display = 'grid';
+        col.style.gap = '8px';
+        for(const v of arr){
+          const d = document.createElement('div');
+          const isLive = unopenedVals.has(v);
+          d.className = 'pill ' + (isLive? 'live':'gone');
+          d.innerHTML = `<div>${fmt(v)}</div><div>${isLive? '●':'×'}</div>`;
+          col.appendChild(d);
+        }
+        return col;
       }
+      container.appendChild(makeCol(left));
+      container.appendChild(makeCol(right));
     }
 
     function currentOffer(){
@@ -288,8 +312,8 @@
 
     function updateOfferPreview(){
       if (attempts === 0){ el('offerPreview').textContent = '—'; return; }
-      const offer = currentOffer();
-      el('offerPreview').textContent = `Current offer: ${fmt(offer)}`;
+      const {amount} = currentOffer();
+      el('offerPreview').textContent = `Current offer: ${fmt(amount)}`;
     }
 
     function onBoxClick(label){
@@ -301,6 +325,7 @@
       if (!heldLabel){
         b.held = true; heldLabel = b.label; renderAll();
         setHint('Now open a DIFFERENT box to reveal it. Your box stays sealed.');
+        playSound('click');
         return;
       }
 
@@ -311,6 +336,8 @@
       b.opened = true;
       attempts += 1;
       history.push({label: b.label});
+      lastOpenedValue = b.value;
+      playSound('click');
 
       renderAll();
       el('undoBtn').disabled = history.length === 0;
@@ -330,8 +357,16 @@
     // ===== Offer Modal =====
     function showOfferModal(){
       const back = el('offerModal');
-      el('offerAmount').textContent = fmt(currentOffer());
+      const {amount, risk, damping, exp} = currentOffer();
+      el('offerAmount').textContent = fmt(amount);
+      const remainingCount = boxes.filter(b=> !b.opened).length;
+      const openedTxt = lastOpenedValue != null ? `You opened ${fmt(lastOpenedValue)}.` : '';
+      el('offerContext').innerHTML = `${openedTxt} Remaining unopened boxes: <strong>${remainingCount}</strong>. Expected value ≈ <strong>${fmt(Math.round(exp))}</strong>`;
+      const effective = Math.max(0, Math.min(1, risk * (damping || 1)));
+      el('riskFill').style.width = Math.round(effective*100) + '%';
+      el('riskLabel').textContent = Math.round(effective*100) + '%';
       back.style.display = 'flex';
+      playSound('offer');
     }
     function hideOfferModal(){ el('offerModal').style.display = 'none'; }
 
@@ -341,13 +376,15 @@
     el('noDealBtn').addEventListener('click', ()=>{
       hideOfferModal();
       setHint('No Deal. Open another box (not your held one).');
+      playSound('click');
       if (boxes.filter(b=> !b.opened).length === 1) endWithHeld();
     });
 
     el('dealBtn').addEventListener('click', ()=>{
-      const prize = currentOffer();
+      const {amount} = currentOffer();
       hideOfferModal();
-      endWithDeal(prize);
+      playSound('win');
+      endWithDeal(amount);
     });
 
     function endWithDeal(amount){
@@ -370,6 +407,7 @@
         <div>You win: <strong>${fmt(held.value)}</strong> 🎉</div>
       `;
       el('finalModal').style.display = 'flex';
+      playSound('win');
     }
 
     el('closeFinal').addEventListener('click', ()=> el('finalModal').style.display = 'none');
@@ -382,8 +420,10 @@
       const b = boxes.find(x=> x.label === last.label);
       if (b){ b.opened = false; }
       attempts -= 1;
+      lastOpenedValue = null;
       renderAll();
       el('undoBtn').disabled = history.length === 0;
+      playSound('click');
     });
 
     // ===== New Game =====
@@ -396,6 +436,22 @@
 
     // Boot
     initGame();
+
+    // ===== Sounds (WebAudio) =====
+    let audioCtx;
+    function beep(freq=440, dur=0.08, gain=0.02){
+      audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = freq; g.gain.value = gain;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + dur);
+    }
+    function playSound(kind){
+      if (kind==='click') { beep(520, 0.05, 0.03); }
+      else if (kind==='offer') { beep(440, 0.06, 0.025); setTimeout(()=>beep(660, 0.06, 0.02), 80); }
+      else if (kind==='win') { beep(660, 0.07, 0.03); setTimeout(()=>beep(880, 0.09, 0.03), 90); setTimeout(()=>beep(990, 0.12, 0.02), 200); }
+    }
   </script>
 </body>
 </html>
