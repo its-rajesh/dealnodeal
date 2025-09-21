@@ -125,7 +125,7 @@
         <div class="panel">
           <h2>Banker</h2>
           <div class="toolbar">
-            <div class="hint">Offer updates after every opened box.</div>
+            <div class="hint" id="offerHint">Offers arrive after 5, 4, 3, 2 opens… then every open.</div>
             <button id="showOfferBtn" class="btn secondary" disabled>Show Offer</button>
           </div>
           <div style="padding:12px 16px; color:var(--muted); font-size:14px" id="offerPreview">—</div>
@@ -135,7 +135,7 @@
           </div>
         </div>
         <div class="footer">
-          <div class="note">Tip: Early offers are conservative; they grow as the game progresses.</div>
+          <div class="note">Tip: Offers are conservative early; they ramp up later.</div>
         </div>
       </aside>
     </div>
@@ -165,6 +165,21 @@
     </div>
   </div>
 
+  <!-- Modal: Final Choice (Held vs Last Box) -->
+  <div class="modal-backdrop" id="finalChoiceModal">
+    <div class="modal tada">
+      <header>
+        <div style="font-weight:800">Final Choice</div>
+        <button class="btn secondary" id="closeFinalChoice" aria-label="Close">Close</button>
+      </header>
+      <div class="body" id="finalChoiceBody" style="font-size:16px"></div>
+      <div class="deal-actions">
+        <button class="btn secondary" id="keepHeldBtn">Keep Held</button>
+        <button class="btn" id="switchBtn">Switch to Last Box</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Final Result -->
   <div class="modal-backdrop" id="finalModal">
     <div class="modal tada">
@@ -190,9 +205,9 @@
         <ol style="margin:0; padding-left:18px; line-height:1.6">
           <li>Pick <strong>one personal box</strong>. It moves below and stays sealed.</li>
           <li>Open other boxes one by one. You’ll see what they contained.</li>
-          <li>After each open, the <strong>Banker</strong> makes an offer based on remaining values.</li>
+          <li>The Banker makes offers after <strong>5, 4, 3, 2</strong> opened boxes, then <strong>after every box</strong>.</li>
           <li>Choose <strong>Deal</strong> to take the offer or <strong>No Deal</strong> to keep playing.</li>
-          <li>If you never deal, you win whatever is inside your <strong>held box</strong>.</li>
+          <li>When only two boxes remain, choose between your <strong>Held</strong> box and the <strong>last box</strong>.</li>
         </ol>
         <p style="margin-top:10px">Early offers are conservative; they get closer to the expected value as boxes run out.</p>
       </div>
@@ -207,7 +222,7 @@
 
   <script>
     // ===== Helpers =====
-    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹ ','₹');
+    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹\\u00A0','₹');
 
     const BOX_VALUES = [
       1, 5, 10, 25, 50,
@@ -235,6 +250,12 @@
     let history = [];
     let lastOpenedValue = null;
 
+    // Offer cadence: 5, 4, 3, 2, then every 1
+    let stepQueue = [];
+    let currentThreshold = 5;
+    let opensSinceOffer = 0;
+    let offerReady = false;
+
     const el = (id)=>document.getElementById(id);
 
     function initGame(){
@@ -243,11 +264,19 @@
       for(let i=values.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [values[i],values[j]]=[values[j],values[i]]; }
       boxes = labels.map((lab,i)=> ({label:lab,value:values[i],opened:false,held:false}));
       heldLabel = null; attempts = 0; history = []; lastOpenedValue = null;
+
+      // reset cadence
+      stepQueue = [4,3,2];
+      currentThreshold = 5;
+      opensSinceOffer = 0;
+      offerReady = false;
+
       renderAll();
       setHint('Choose your personal box (click one). It stays sealed till the end.');
       el('offerPreview').textContent = '—';
       el('riskFill').style.width = '0%';
       el('riskLabel').textContent = '0%';
+      el('showOfferBtn').disabled = true;
       showHelp();
     }
 
@@ -307,12 +336,20 @@
     }
 
     function updateOfferPreview(){
-      if (attempts===0){ el('offerPreview').textContent='—'; return; }
+      const unopenedCount = boxes.filter(b=> !b.opened).length;
       const {amount, risk, damping} = currentOffer();
-      el('offerPreview').textContent = `Current offer: ${fmt(amount)}`;
       const eff = Math.max(0, Math.min(1, risk*(damping||1)));
       el('riskFill').style.width = Math.round(eff*100)+'%';
       el('riskLabel').textContent = Math.round(eff*100)+'%';
+
+      if (offerReady){
+        el('offerPreview').textContent = `Offer ready: ${fmt(amount)}`;
+        el('showOfferBtn').disabled = false;
+      } else {
+        const toGo = Math.max(0, currentThreshold - opensSinceOffer);
+        el('offerPreview').textContent = `Next offer in ${toGo} ${toGo===1?'open':'opens'}`;
+        el('showOfferBtn').disabled = true;
+      }
     }
 
     function onBoxClick(label){
@@ -326,17 +363,32 @@
 
       // Open a non-held box
       b.opened = true; attempts += 1; lastOpenedValue = b.value; el('openSound').play();
+      opensSinceOffer += 1;
       renderAll();
 
-      // If only held remains, finish
-      if (boxes.filter(x=> !x.opened).length===1){ revealHeldAndFinish(); return; }
+      // Remaining unopened (incl held)
+      const unopenedLeft = boxes.filter(x=> !x.opened).length;
 
-      // Show offer after a moment so the reveal is visible
-      setTimeout(()=> showOfferModal(), 800);
+      // If only 2 remain (held + one other), ask final choice
+      if (unopenedLeft === 2){
+        showFinalChoice();
+        return;
+      }
+
+      // Check if an offer is due
+      if (opensSinceOffer >= currentThreshold){
+        offerReady = true;
+        // schedule modal so the reveal is seen first
+        setTimeout(()=> showOfferModal(), 800);
+      } else {
+        offerReady = false;
+      }
+      updateOfferPreview();
     }
 
     // ===== Offer Modal =====
     function showOfferModal(){
+      if (!offerReady) return; // guard
       const {amount, risk, damping, exp} = currentOffer();
       const openedTxt = lastOpenedValue!=null ? `You opened <strong>${fmt(lastOpenedValue)}</strong>. ` : '';
       const remainingCount = boxes.filter(b=> !b.opened).length;
@@ -352,13 +404,23 @@
     el('showOfferBtn').addEventListener('click', showOfferModal);
     el('closeModal').addEventListener('click', hideOfferModal);
 
-    el('noDealBtn').addEventListener('click', ()=>{ hideOfferModal(); setHint('No Deal. Open another box.'); });
+    el('noDealBtn').addEventListener('click', ()=>{
+      hideOfferModal();
+      setHint('No Deal. Open another box.');
+      // advance cadence: after an offer, move to next step (4,3,2, then 1s)
+      opensSinceOffer = 0;
+      offerReady = false;
+      if (stepQueue.length > 0){
+        currentThreshold = stepQueue.shift();
+      } else {
+        currentThreshold = 1;
+      }
+      updateOfferPreview();
+    });
 
     el('dealBtn').addEventListener('click', ()=>{
       hideOfferModal();
-      // Always reveal held box before showing final result (per request #2)
-      revealHeld(true);
-      // Celebrate and show final
+      revealHeld(true); // reveal held text
       launchConfetti(); el('dealSound').play();
       const held = boxes.find(b=> b.label===heldLabel);
       const {amount} = currentOffer();
@@ -371,22 +433,61 @@
       el('finalModal').style.display='flex';
     });
 
-    // ===== Finish (No Deal to the end) =====
-    function revealHeldAndFinish(){
-      revealHeld(false);
-      launchConfetti();
-      const held = boxes.find(b=> b.label===heldLabel);
-      const fb = el('finalBody');
-      fb.innerHTML = `
-        <div style="margin-bottom:10px; color:var(--muted)">No Deal to the end. Only your box remains.</div>
-        <div style="font-size:28px; font-weight:800; margin-bottom:12px">Your box #${held.label} contains: ${fmt(held.value)}</div>
-        <div>You win: <strong>${fmt(held.value)}</strong> 🎉</div>
+    // ===== Final Choice (when 2 boxes remain) =====
+    function showFinalChoice(){
+      const other = boxes.find(b=> !b.opened && !b.held);
+      const held = boxes.find(b=> b.held);
+      const body = el('finalChoiceBody');
+      body.innerHTML = `
+        <div style="margin-bottom:10px; color:var(--muted)">Two boxes remain.</div>
+        <div>Keep your held box <strong>#${held.label}</strong> or switch to the last box <strong>#${other.label}</strong>?</div>
       `;
-      el('finalModal').style.display='flex';
+      el('finalChoiceModal').style.display = 'flex';
     }
 
-    // Reveal held value in the held card (and text) before final
-    function revealHeld(fromDeal){
+    function hideFinalChoice(){ el('finalChoiceModal').style.display='none'; }
+
+    el('closeFinalChoice').addEventListener('click', hideFinalChoice);
+
+    el('keepHeldBtn').addEventListener('click', ()=>{
+      hideFinalChoice();
+      revealHeld(false);
+      launchConfetti();
+      const held = boxes.find(b=> b.held);
+      const other = boxes.find(b=> !b.opened && !b.held);
+      const fb = el('finalBody');
+      fb.innerHTML = `
+        <div style="margin-bottom:10px; color:var(--muted)">You kept your held box.</div>
+        <div style="font-size:28px; font-weight:800; margin-bottom:12px">Your box #${held.label} contains: ${fmt(held.value)}</div>
+        <div>The other box #${other.label} had: <strong>${fmt(other.value)}</strong>.</div>
+      `;
+      el('finalModal').style.display='flex';
+    });
+
+    el('switchBtn').addEventListener('click', ()=>{
+      hideFinalChoice();
+      const held = boxes.find(b=> b.held);
+      const other = boxes.find(b=> !b.opened && !b.held);
+      // Reveal held in the card as well (consistency with earlier spec)
+      revealHeld(false);
+      launchConfetti();
+      const fb = el('finalBody');
+      fb.innerHTML = `
+        <div style="margin-bottom:10px; color:var(--muted)">You switched to the last box.</div>
+        <div style="font-size:28px; font-weight:800; margin-bottom:12px">Box #${other.label} contains: ${fmt(other.value)}</div>
+        <div>Your held box #${held.label} had: <strong>${fmt(held.value)}</strong>.</div>
+      `;
+      el('finalModal').style.display='flex';
+    });
+
+    // ===== Finish (legacy path, unused now) =====
+    function revealHeldAndFinish(){
+      // with final choice flow, this path shouldn't trigger anymore
+      showFinalChoice();
+    }
+
+    // Reveal held value in the held card
+    function revealHeld(){
       const held = boxes.find(b=> b.label===heldLabel);
       if (!held) return;
       el('heldMeta').textContent = `Your box #${held.label} contains: ${fmt(held.value)}`;
@@ -429,12 +530,17 @@
     el('playAgainBtn').addEventListener('click', ()=>{ el('finalModal').style.display='none'; initGame(); });
 
     el('undoBtn').addEventListener('click', ()=>{
-      const last = boxes.findLast?.(b=> b.opened && b.label!==heldLabel);
+      // undo last opened non-held box
+      const last = [...boxes].reverse().find(b=> b.opened && !b.held);
       if (!last || attempts===0) return;
-      last.opened = false; attempts -= 1; lastOpenedValue = null; renderAll();
+      last.opened = false; attempts -= 1; lastOpenedValue = null;
+      // fix cadence counters
+      if (opensSinceOffer > 0) opensSinceOffer -= 1;
+      if (offerReady && opensSinceOffer < currentThreshold){ offerReady = false; }
+      renderAll();
     });
 
-    el('newGameBtn').addEventListener('click', ()=>{ initGame(); });
+    el('newGameBtn').addEventListener('click', ()=>{ el('finalModal').style.display='none'; el('finalChoiceModal').style.display='none'; initGame(); });
 
     // Help modal events
     el('closeHelp').addEventListener('click', hideHelp);
@@ -445,7 +551,11 @@
 
     // ESC closes modals
     document.addEventListener('keydown', (e)=>{
-      if (e.key==='Escape'){ el('offerModal').style.display='none'; el('finalModal').style.display='none'; }
+      if (e.key==='Escape'){
+        el('offerModal').style.display='none';
+        el('finalModal').style.display='none';
+        el('finalChoiceModal').style.display='none';
+      }
     });
   </script>
 </body>
