@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deal or No Deal — ₹ Edition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#121821; --muted:#96a0b3; --ink:#e9f0ff; --accent:#7cc7ff; --accent-2:#00e0b8; --warn:#ff857a; --gold:#ffd166;
+      --card:#0f141c; --card2:#0c1118; --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial; color:var(--ink); background:radial-gradient(1200px 800px at 20% -10%, #162033 0%, #0b0f14 60%);}    
+    a{color:var(--accent)}
+    .app{max-width:1200px; margin:0 auto; padding:24px;}
+    header{display:flex; align-items:center; gap:16px; margin-bottom:20px}
+    .logo{font-weight:800; font-size:clamp(20px,3vw,28px); letter-spacing:.2px}
+    .sub{color:var(--muted); font-size:14px}
+    .wrap{display:grid; grid-template-columns: 1.5fr .9fr; gap:24px}
+    @media (max-width: 980px){ .wrap{grid-template-columns: 1fr;}}
+
+    .panel{background: linear-gradient(180deg, var(--card) 0%, var(--card2) 100%); border:1px solid #1e2837; border-radius:16px; box-shadow:var(--shadow)}
+    .panel h2{margin:0; padding:18px 20px; border-bottom:1px solid #1e2837; font-size:16px; letter-spacing:.25px}
+
+    .toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid #1e2837;}
+    .hint{color:var(--muted); font-size:14px}
+    .btn{appearance:none; border:none; border-radius:12px; padding:10px 14px; font-weight:600; color:#041018; background:linear-gradient(180deg, var(--accent), #5db8ff); cursor:pointer; box-shadow: 0 6px 18px rgba(124,199,255,.35)}
+    .btn.secondary{background: #192332; color: var(--ink); border:1px solid #273246; box-shadow:none}
+    .btn.warn{background: linear-gradient(180deg, #ff9a91, #ff6b5f); color:#2b0b0b}
+
+    .grid{display:grid; grid-template-columns: repeat(6, 1fr); gap:12px; padding:16px}
+    @media (max-width: 600px){ .grid{grid-template-columns: repeat(4, 1fr);} }
+    .box{position:relative; aspect-ratio: 1.2/1; display:flex; align-items:center; justify-content:center; border-radius:14px; user-select:none; cursor:pointer; font-weight:800; letter-spacing:.3px; font-size:18px; transition:.18s transform ease, .18s opacity ease, .18s filter ease;}
+    .box::before{content:""; position:absolute; inset:0; border-radius:14px; background:linear-gradient(180deg, #0f1828, #0c1220); border:1px solid #1e2a41; box-shadow: inset 0 0 0 1px rgba(255,255,255,.03), 0 8px 16px rgba(0,0,0,.35)}
+    .box span{position:relative; z-index:1}
+    .box:hover{transform: translateY(-2px)}
+    .box.held{background: linear-gradient(180deg, rgba(124,199,255,.1), rgba(0,224,184,.08)); box-shadow: 0 0 0 2px var(--accent-2) inset;}
+    .box.opened{filter:saturate(.35) brightness(.7); cursor:default}
+    .box.revealed::after{content:attr(data-value); position:absolute; inset:auto 6px 6px auto; background:rgba(0,0,0,.5); padding:4px 8px; border-radius:8px; font-size:12px; color:var(--gold); border:1px solid rgba(255,209,102,.45)}
+
+    .side{display:grid; grid-template-rows:auto auto 1fr auto; gap:12px; padding:12px}
+    .stats{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+    .stat{background:#121a29; border:1px solid #1e2837; border-radius:12px; padding:12px; text-align:center}
+    .stat .k{font-size:12px; color:var(--muted)}
+    .stat .v{font-size:18px; font-weight:800}
+
+    .values{display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px}
+    .pill{background:#101828; border:1px solid #1e2837; border-radius:10px; padding:8px 10px; font-size:13px; color:var(--muted); display:flex; justify-content:space-between; align-items:center}
+    .pill.live{color:#d8e7ff}
+    .pill.gone{opacity:.4; text-decoration:line-through}
+
+    .footer{display:flex; gap:8px; justify-content:space-between; align-items:center; padding:10px 12px; border-top:1px solid #1e2837}
+    .note{color:var(--muted); font-size:12px}
+
+    .modal-backdrop{position:fixed; inset:0; background:rgba(5,8,12,.6); display:none; align-items:center; justify-content:center; z-index:50}
+    .modal{width:min(580px, 92vw); background:linear-gradient(180deg, #0f141c, #0c1118); border:1px solid #1e2837; border-radius:16px; box-shadow: var(--shadow); overflow:hidden}
+    .modal header{padding:16px 18px; border-bottom:1px solid #1e2837; justify-content:space-between}
+    .modal .body{padding:18px}
+    .deal-actions{display:flex; gap:10px; justify-content:flex-end; padding:12px 18px; border-top:1px solid #1e2837}
+
+    .tada{animation: tada .6s ease}
+    @keyframes tada{0%{transform:scale(1)} 20%{transform:scale(1.04)} 40%{transform:scale(.98)} 60%{transform:scale(1.02)} 80%{transform:scale(.99)} 100%{transform:scale(1)}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="logo">DEAL or NO DEAL — <span style="color:var(--accent)">₹</span> Edition</div>
+      <div class="sub">Pick one personal box. Open others, take offers… or hold to the end.</div>
+      <div style="flex:1"></div>
+      <button id="newGameBtn" class="btn secondary">New Game</button>
+    </header>
+
+    <div class="wrap">
+      <section class="panel">
+        <div class="toolbar">
+          <div class="hint" id="hint">Choose your personal box (click one). It stays sealed till the end.</div>
+          <div>
+            <button id="undoBtn" class="btn secondary" title="Undo last open" disabled>Undo</button>
+          </div>
+        </div>
+        <div class="grid" id="grid"></div>
+        <div class="footer">
+          <div class="note" id="roundInfo">Round 0</div>
+          <div class="note" id="heldInfo">Held: —</div>
+        </div>
+      </section>
+
+      <aside class="panel side">
+        <h2>Game Stats</h2>
+        <div class="stats">
+          <div class="stat"><div class="k">Attempts</div><div class="v" id="attempts">0</div></div>
+          <div class="stat"><div class="k">Boxes Left</div><div class="v" id="boxesLeft">26</div></div>
+        </div>
+        <div class="panel" style="margin:6px 0">
+          <h2>Remaining Values</h2>
+          <div class="values" id="valuesList"></div>
+        </div>
+        <div class="panel">
+          <h2>Banker</h2>
+          <div class="toolbar">
+            <div class="hint">Offer updates after every opened box.</div>
+            <button id="showOfferBtn" class="btn secondary" disabled>Show Offer</button>
+          </div>
+          <div style="padding:12px 16px; color:var(--muted); font-size:14px" id="offerPreview">—</div>
+        </div>
+        <div class="footer">
+          <div class="note">Tip: Early offers are conservative; they grow as the game progresses.</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Modal for Offer -->
+  <div class="modal-backdrop" id="offerModal">
+    <div class="modal tada">
+      <header>
+        <div style="font-weight:800">Banker’s Offer</div>
+        <button class="btn secondary" id="closeModal" aria-label="Close">Close</button>
+      </header>
+      <div class="body">
+        <div style="font-size:14px; color:var(--muted); margin-bottom:8px">Based on the expected value of remaining unopened boxes (including your held box), with early-round damping.</div>
+        <div style="font-size:clamp(26px, 4vw, 34px); font-weight:800; letter-spacing:.3px" id="offerAmount">₹0</div>
+      </div>
+      <div class="deal-actions">
+        <button id="noDealBtn" class="btn secondary">No Deal</button>
+        <button id="dealBtn" class="btn">Deal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Final Result -->
+  <div class="modal-backdrop" id="finalModal">
+    <div class="modal tada">
+      <header>
+        <div style="font-weight:800">Result</div>
+        <button class="btn secondary" id="closeFinal" aria-label="Close">Close</button>
+      </header>
+      <div class="body" id="finalBody" style="font-size:16px"></div>
+      <div class="deal-actions">
+        <button class="btn" id="playAgainBtn">Play Again</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Helpers =====
+    const fmt = (n)=> n.toLocaleString('en-IN', {maximumFractionDigits:0, style:'currency', currency:'INR'}).replace('₹\u00A0','₹');
+
+    const BOX_VALUES = [
+      1, 5, 10, 25, 50,
+      100, 200, 500,
+      1000, 2000, 5000,
+      10000, 25000, 50000, 75000,
+      100000, 200000, 300000, 500000, 750000,
+      1000000, 1500000, 2000000, 2500000, 3500000, 5000000
+    ];
+
+    // Banker formula: EV * risk * damping - variance penalty (early only)
+    function bankerOffer(remainingValues, attemptsDone, totalAttempts){
+      const exp = remainingValues.reduce((a,b)=>a+b,0) / remainingValues.length;
+      const progress = attemptsDone / Math.max(1, totalAttempts);
+      const risk = 0.50 + 0.40 * progress; // 0.50 -> 0.90
+
+      let damping = 1.0;
+      if (attemptsDone <= 1) damping = 0.40;
+      else if (attemptsDone === 2) damping = 0.50;
+      else if (attemptsDone === 3) damping = 0.60;
+      else if (attemptsDone === 4) damping = 0.70;
+
+      let offer = exp * risk;
+      if (remainingValues.length > 3){
+        const mean = exp;
+        const variance = remainingValues.reduce((s,x)=> s + (x-mean)*(x-mean), 0) / remainingValues.length;
+        const std = Math.sqrt(variance);
+        offer -= 0.04 * std;
+      }
+      offer *= damping;
+      return Math.max(0, Math.round(offer));
+    }
+
+    // ===== State =====
+    let boxes = []; // {label, value, opened, held}
+    let heldLabel = null;
+    let attempts = 0;
+    let history = []; // stack for undo: {label, value}
+
+    const el = (id)=>document.getElementById(id);
+
+    function initGame(){
+      const labels = Array.from({length:26}, (_,i)=> i+1);
+      const values = [...BOX_VALUES];
+      // Shuffle values
+      for(let i=values.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [values[i], values[j]] = [values[j], values[i]];
+      }
+      boxes = labels.map((lab, i)=> ({label: lab, value: values[i], opened:false, held:false}));
+      heldLabel = null; attempts = 0; history = [];
+      renderGrid();
+      renderStats();
+      renderValuesList();
+      setHint('Choose your personal box (click one). It stays sealed till the end.');
+      el('undoBtn').disabled = true;
+      el('showOfferBtn').disabled = true;
+      el('offerPreview').textContent = '—';
+      el('roundInfo').textContent = 'Round 0';
+      el('heldInfo').textContent = 'Held: —';
+    }
+
+    function setHint(msg){ el('hint').textContent = msg; }
+
+    function renderGrid(){
+      const g = el('grid');
+      g.innerHTML = '';
+      // sort by label for consistent placement
+      const sorted = [...boxes].sort((a,b)=> a.label - b.label);
+      for(const b of sorted){
+        const div = document.createElement('div');
+        div.className = 'box' + (b.held?' held':'') + (b.opened?' opened revealed':'');
+        div.dataset.label = b.label;
+        if (b.opened){
+          div.dataset.value = fmt(b.value);
+        }
+        const sp = document.createElement('span');
+        sp.textContent = b.label;
+        div.appendChild(sp);
+        div.addEventListener('click', ()=> onBoxClick(b.label));
+        g.appendChild(div);
+      }
+    }
+
+    function renderStats(){
+      el('attempts').textContent = attempts;
+      el('boxesLeft').textContent = boxes.length;
+      const roundText = `Round ${attempts}`;
+      el('roundInfo').textContent = roundText;
+      el('heldInfo').textContent = `Held: ${heldLabel? heldLabel : '—'}`;
+    }
+
+    function renderValuesList(){
+      const container = el('valuesList');
+      container.innerHTML = '';
+      const all = BOX_VALUES.slice().sort((a,b)=> a-b);
+      const live = boxes.map(b=>b.value);
+      const liveSet = new Set(live);
+      const left = [], right = [];
+      all.forEach((v,i)=> (i%2? right: left).push(v));
+      function pill(v){
+        const d = document.createElement('div');
+        const isLive = liveSet.has(v);
+        d.className = 'pill ' + (isLive? 'live':'gone');
+        d.innerHTML = `<div>${fmt(v)}</div><div>${isLive? '●':'×'}</div>`;
+        return d;
+      }
+      for(const v of left) container.appendChild(pill(v));
+      for(const v of right) container.appendChild(pill(v));
+    }
+
+    function currentOffer(){
+      const values = boxes.map(b=> b.value); // includes held box (unopened)
+      return bankerOffer(values, attempts, 25); // total attempts max = 25 (until 1 box left)
+    }
+
+    function updateOfferPreview(){
+      if (attempts === 0){ el('offerPreview').textContent = '—'; return; }
+      const offer = currentOffer();
+      el('offerPreview').textContent = `Current offer: ${fmt(offer)}`;
+    }
+
+    function onBoxClick(label){
+      const idx = boxes.findIndex(b=> b.label === label);
+      if (idx === -1) return;
+      const b = boxes[idx];
+
+      // If no held yet: first click chooses personal box (do NOT open it now)
+      if (!heldLabel){
+        b.held = true; heldLabel = b.label; renderGrid(); renderStats();
+        setHint('Now open a DIFFERENT box to reveal it. Your box stays sealed.');
+        return;
+      }
+
+      // After holding, can only open non-held, non-opened boxes
+      if (b.held || b.opened) return;
+
+      // Open this box
+      b.opened = true;
+      attempts += 1;
+      history.push({label: b.label, value: b.value});
+
+      // Remove it visually and from remaining boxes list
+      // We will keep it in the array but mark opened; also present value badge
+      // Alternatively, we could actually remove. We'll keep and filter when needed.
+      // However, for banker + remaining values, we must exclude opened ones.
+      // Let's filter boxes array to unopened only now for simplicity
+      boxes = boxes.filter(x=> !x.opened);
+
+      renderGrid();
+      renderStats();
+      renderValuesList();
+
+      const offer = currentOffer();
+      el('offerPreview').textContent = `Current offer: ${fmt(offer)}`;
+      el('showOfferBtn').disabled = false;
+      el('undoBtn').disabled = history.length === 0;
+
+      // Auto-show offer each time a box is opened
+      showOfferModal();
+
+      // If only held box remains after filtering -> end game reveal
+      if (boxes.length === 1){
+        // Reveal held box value
+        endWithHeld();
+      }
+    }
+
+    // ===== Offer Modal =====
+    function showOfferModal(){
+      const back = el('offerModal');
+      el('offerAmount').textContent = fmt(currentOffer());
+      back.style.display = 'flex';
+    }
+    function hideOfferModal(){ el('offerModal').style.display = 'none'; }
+
+    el('showOfferBtn').addEventListener('click', showOfferModal);
+    el('closeModal').addEventListener('click', hideOfferModal);
+
+    el('noDealBtn').addEventListener('click', ()=>{
+      hideOfferModal();
+      setHint('No Deal. Open another box (not your held one).');
+      if (boxes.length === 1) endWithHeld();
+    });
+
+    el('dealBtn').addEventListener('click', ()=>{
+      const prize = currentOffer();
+      hideOfferModal();
+      endWithDeal(prize);
+    });
+
+    function endWithDeal(amount){
+      // Show final modal
+      const held = boxes.find(b=> b.label === heldLabel);
+      const final = el('finalBody');
+      final.innerHTML = `
+        <div style="margin-bottom:10px; color:var(--muted)">You took the banker’s deal.</div>
+        <div style="font-size:28px; font-weight:800; margin-bottom:12px">You win: ${fmt(amount)}</div>
+        <div>Your sealed box was <strong>#${held.label}</strong>.</div>
+      `;
+      el('finalModal').style.display = 'flex';
+    }
+
+    function endWithHeld(){
+      const held = boxes.find(b=> b.label === heldLabel);
+      const final = el('finalBody');
+      final.innerHTML = `
+        <div style="margin-bottom:10px; color:var(--muted)">No Deal to the end. Only your box remains.</div>
+        <div style="font-size:28px; font-weight:800; margin-bottom:12px">Your box #${held.label} contains: ${fmt(held.value)}</div>
+        <div>You win: <strong>${fmt(held.value)}</strong> 🎉</div>
+      `;
+      el('finalModal').style.display = 'flex';
+    }
+
+    el('closeFinal').addEventListener('click', ()=> el('finalModal').style.display = 'none');
+    el('playAgainBtn').addEventListener('click', ()=>{ el('finalModal').style.display='none'; initGame(); });
+
+    // ===== Undo (reverts last OPEN) =====
+    el('undoBtn').addEventListener('click', ()=>{
+      if (!history.length || attempts === 0) return;
+      const last = history.pop();
+      attempts -= 1;
+      // Reinsert last opened back into boxes array (it was filtered out)
+      boxes.push({label:last.label, value:last.value, opened:false, held: last.label===heldLabel});
+      // Keep boxes sorted by label for consistent layout
+      boxes.sort((a,b)=> a.label - b.label);
+      renderGrid(); renderStats(); renderValuesList(); updateOfferPreview();
+      el('undoBtn').disabled = history.length === 0;
+    });
+
+    // ===== New Game =====
+    el('newGameBtn').addEventListener('click', initGame);
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e)=>{
+      if (e.key === 'Escape') { hideOfferModal(); el('finalModal').style.display='none'; }
+    });
+
+    // Boot
+    initGame();
+  </script>
+</body>
+</html>
