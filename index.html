@@ -260,7 +260,7 @@
     }
 
     function currentOffer(){
-      const values = boxes.map(b=> b.value); // includes held box (unopened)
+      const values = boxes.map(b=> b.value); // includes held box (unopened) 
       return bankerOffer(values, attempts, 25); // total attempts max = 25 (until 1 box left)
     }
 
